@@ -1,0 +1,2818 @@
+// ==UserScript==
+// @name         VulnonaMAP - Graphite Night v3.3
+// @namespace    graphite.night.vulnona
+// @version      3.3.0
+// @description  Low-glare Graphite Night theme for VulnonaMAP with cozy sliders and automatic map defaults.
+// @match        https://vulnona.com/*
+// @match        https://www.vulnona.com/*
+// @run-at       document-start
+// @grant        none
+// ==/UserScript==
+
+(() => {
+    'use strict';
+
+    const TOP = window.top === window.self;
+    const KEY = 'gn-vulnona-v33';
+
+    const DEFAULTS = {
+        uiScale: 100,
+        roundness: 8,
+        mapBrightness: 100,
+        dimMap: false,
+
+        defaultPatrolZones: true,
+        defaultMigrationZones: true,
+        defaultSanctuary: true,
+        defaultAnimateLatestLocation: true
+    };
+
+    const STARTUP_OPTIONS = [
+        {
+            setting: 'defaultPatrolZones',
+
+            aliases: [
+                'patrolzone',
+                'patrol zone',
+                'patrol zones'
+            ]
+        },
+
+        {
+            setting: 'defaultMigrationZones',
+
+            aliases: [
+                'migration',
+                'migration zone',
+                'migration zones'
+            ]
+        },
+
+        {
+            setting: 'defaultSanctuary',
+
+            aliases: [
+                'sanctuary',
+                'sanctuaries'
+            ]
+        },
+
+        {
+            setting: 'defaultAnimateLatestLocation',
+
+            aliases: [
+                'animate latest location',
+                'animate latest loc'
+            ]
+        }
+    ];
+
+    let settings = load();
+    let paintQueued = false;
+    let startupPresetRunning = false;
+
+
+    /* =========================================================
+       SETTINGS STORAGE
+       ========================================================= */
+
+    function load() {
+        try {
+            return {
+                ...DEFAULTS,
+
+                ...JSON.parse(
+                    localStorage.getItem(KEY) || '{}'
+                )
+            };
+        } catch {
+            return {
+                ...DEFAULTS
+            };
+        }
+    }
+
+
+    function save() {
+        localStorage.setItem(
+            KEY,
+            JSON.stringify(settings)
+        );
+    }
+
+
+    /* =========================================================
+       MASTER CSS
+       ========================================================= */
+
+    const css = `
+        :root {
+            color-scheme: dark !important;
+
+            --gn-bg: #08090b;
+            --gn-bg2: #0a0b0d;
+
+            --gn-panel: #0e1013;
+            --gn-panel2: #121419;
+
+            --gn-text: #d2d4d7;
+            --gn-strong: #eef0f2;
+            --gn-muted: #858990;
+
+            --gn-border:
+                rgba(255,255,255,.055);
+
+            --gn-border-soft:
+                rgba(255,255,255,.035);
+
+            --gn-accent:
+                #98505a;
+
+            --gn-accent-dark:
+                #74414a;
+
+            --gn-accent-soft:
+                rgba(152,80,90,.14);
+
+            --gn-radius:
+                8px;
+
+            --gn-scale:
+                1;
+
+            --gn-map-brightness:
+                1;
+        }
+
+
+        /* =====================================================
+           GLOBAL
+           ===================================================== */
+
+        html,
+        body {
+            background:
+                var(--gn-bg) !important;
+
+            background-color:
+                var(--gn-bg) !important;
+
+            color:
+                var(--gn-text) !important;
+        }
+
+
+        html,
+        body,
+        button,
+        input,
+        textarea,
+        select,
+        option,
+        table {
+            font-family:
+                "Google Sans",
+                "Google Sans Text",
+                "Product Sans",
+                Inter,
+                "Segoe UI",
+                Roboto,
+                Arial,
+                sans-serif !important;
+
+            -webkit-font-smoothing:
+                antialiased !important;
+
+            text-rendering:
+                optimizeLegibility !important;
+        }
+
+
+        body {
+            font-size:
+                calc(
+                    1em *
+                    var(--gn-scale)
+                ) !important;
+        }
+
+
+        /* =====================================================
+           LINKS
+           ===================================================== */
+
+        a {
+            color:
+                #c17f8a !important;
+
+            text-decoration-color:
+                rgba(193,127,138,.36) !important;
+        }
+
+
+        a:hover {
+            color:
+                #dfa1ab !important;
+        }
+
+
+        /* =====================================================
+           TEXT INPUTS
+           ===================================================== */
+
+        input[type="text"],
+        input[type="number"],
+        input[type="search"],
+        input[type="email"],
+        input[type="password"],
+        input[type="url"],
+        textarea,
+        select {
+            background:
+                #0b0d10 !important;
+
+            background-image:
+                none !important;
+
+            color:
+                var(--gn-strong) !important;
+
+            border:
+                1px solid
+                var(--gn-border) !important;
+
+            border-radius:
+                var(--gn-radius) !important;
+
+            box-shadow:
+                none !important;
+
+            outline:
+                none !important;
+        }
+
+
+        input::placeholder,
+        textarea::placeholder {
+            color:
+                #666a70 !important;
+
+            opacity:
+                1 !important;
+        }
+
+
+        option {
+            background:
+                #101216 !important;
+
+            color:
+                var(--gn-text) !important;
+        }
+
+
+        /* =====================================================
+           CHECKBOXES / RADIOS
+           ===================================================== */
+
+        input[type="checkbox"],
+        input[type="radio"] {
+            accent-color:
+                var(--gn-accent) !important;
+        }
+
+
+        /* =====================================================
+           COZY RANGE SLIDERS
+           ===================================================== */
+
+        .range_scaler {
+            background:
+                transparent !important;
+
+            background-color:
+                transparent !important;
+
+            background-image:
+                none !important;
+
+            border:
+                0 !important;
+
+            box-shadow:
+                none !important;
+
+            text-shadow:
+                none !important;
+
+            padding:
+                3px 4px 1px !important;
+        }
+
+
+        html body .range_scaler input[type="range"],
+        html body input[type="range"] {
+            appearance:
+                none !important;
+
+            -moz-appearance:
+                none !important;
+
+            -webkit-appearance:
+                none !important;
+
+            width:
+                calc(100% - 4px) !important;
+
+            height:
+                16px !important;
+
+            margin:
+                0 2px !important;
+
+            padding:
+                0 !important;
+
+            background:
+                transparent !important;
+
+            background-color:
+                transparent !important;
+
+            background-image:
+                none !important;
+
+            border:
+                0 !important;
+
+            outline:
+                none !important;
+
+            box-shadow:
+                none !important;
+
+            cursor:
+                pointer !important;
+
+            accent-color:
+                var(--gn-accent) !important;
+        }
+
+
+        /* =====================================================
+           FIREFOX RANGE TRACK
+           ===================================================== */
+
+        html body .range_scaler input[type="range"]::-moz-range-track,
+        html body input[type="range"]::-moz-range-track {
+            height:
+                4px !important;
+
+            background:
+                #111318 !important;
+
+            background-color:
+                #111318 !important;
+
+            background-image:
+                none !important;
+
+            border:
+                0 !important;
+
+            border-radius:
+                999px !important;
+
+            box-shadow:
+                inset 0 1px 2px
+                rgba(0,0,0,.55) !important;
+        }
+
+
+        html body .range_scaler input[type="range"]::-moz-range-progress,
+        html body input[type="range"]::-moz-range-progress {
+            height:
+                4px !important;
+
+            background:
+                #874852 !important;
+
+            background-color:
+                #874852 !important;
+
+            background-image:
+                none !important;
+
+            border:
+                0 !important;
+
+            border-radius:
+                999px !important;
+
+            box-shadow:
+                none !important;
+        }
+
+
+        html body .range_scaler input[type="range"]::-moz-range-thumb,
+        html body input[type="range"]::-moz-range-thumb {
+            width:
+                11px !important;
+
+            height:
+                11px !important;
+
+            background:
+                #b9959b !important;
+
+            background-color:
+                #b9959b !important;
+
+            background-image:
+                none !important;
+
+            border:
+                2px solid
+                #2d1d21 !important;
+
+            border-radius:
+                50% !important;
+
+            box-shadow:
+                0 1px 4px
+                rgba(0,0,0,.65) !important;
+
+            transition:
+                background-color .12s ease,
+                transform .12s ease,
+                box-shadow .12s ease !important;
+        }
+
+
+        html body .range_scaler input[type="range"]:hover::-moz-range-thumb,
+        html body input[type="range"]:hover::-moz-range-thumb {
+            background:
+                #d0adb3 !important;
+
+            transform:
+                scale(1.08) !important;
+        }
+
+
+        html body .range_scaler input[type="range"]:focus-visible::-moz-range-thumb,
+        html body input[type="range"]:focus-visible::-moz-range-thumb {
+            box-shadow:
+                0 0 0 3px
+                rgba(152,80,90,.14),
+                0 1px 4px
+                rgba(0,0,0,.65) !important;
+        }
+
+
+        /* =====================================================
+           WEBKIT / CHROMIUM RANGE TRACK
+           ===================================================== */
+
+        html body .range_scaler input[type="range"]::-webkit-slider-runnable-track,
+        html body input[type="range"]::-webkit-slider-runnable-track {
+            height:
+                4px !important;
+
+            background:
+                #111318 !important;
+
+            background-color:
+                #111318 !important;
+
+            background-image:
+                none !important;
+
+            border:
+                0 !important;
+
+            border-radius:
+                999px !important;
+
+            box-shadow:
+                inset 0 1px 2px
+                rgba(0,0,0,.55) !important;
+        }
+
+
+        html body .range_scaler input[type="range"]::-webkit-slider-thumb,
+        html body input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance:
+                none !important;
+
+            width:
+                11px !important;
+
+            height:
+                11px !important;
+
+            margin-top:
+                -3.5px !important;
+
+            background:
+                #b9959b !important;
+
+            background-color:
+                #b9959b !important;
+
+            background-image:
+                none !important;
+
+            border:
+                2px solid
+                #2d1d21 !important;
+
+            border-radius:
+                50% !important;
+
+            box-shadow:
+                0 1px 4px
+                rgba(0,0,0,.65) !important;
+        }
+
+
+        html body .range_scaler input[type="range"]:hover::-webkit-slider-thumb,
+        html body input[type="range"]:hover::-webkit-slider-thumb {
+            background:
+                #d0adb3 !important;
+
+            transform:
+                scale(1.08) !important;
+        }
+
+
+        /* =====================================================
+           RANGE SCALE NUMBERS
+           ===================================================== */
+
+        .range_scaler > span {
+            color:
+                #565a60 !important;
+
+            background:
+                transparent !important;
+
+            background-color:
+                transparent !important;
+
+            background-image:
+                none !important;
+
+            border:
+                0 !important;
+
+            box-shadow:
+                none !important;
+
+            text-shadow:
+                none !important;
+
+            font-size:
+                8.5px !important;
+
+            font-weight:
+                400 !important;
+
+            opacity:
+                .62 !important;
+        }
+
+
+        .range_scaler > span:hover {
+            color:
+                #90949a !important;
+
+            opacity:
+                .9 !important;
+        }
+
+
+        .range_scaler br {
+            line-height:
+                2px !important;
+        }
+
+
+        .range_scaler,
+        .range_scaler::before,
+        .range_scaler::after {
+            background:
+                transparent !important;
+
+            background-color:
+                transparent !important;
+
+            background-image:
+                none !important;
+
+            border:
+                0 !important;
+
+            box-shadow:
+                none !important;
+        }
+
+
+        [id^="cfgset_"].range_scaler {
+            background:
+                transparent !important;
+
+            background-color:
+                transparent !important;
+
+            background-image:
+                none !important;
+
+            border:
+                0 !important;
+
+            box-shadow:
+                none !important;
+        }
+
+
+        /* =====================================================
+           BUTTONS
+           ===================================================== */
+
+        button,
+        input[type="button"],
+        input[type="submit"],
+        input[type="reset"] {
+            background:
+                #121419 !important;
+
+            background-image:
+                none !important;
+
+            color:
+                var(--gn-text) !important;
+
+            border:
+                1px solid
+                var(--gn-border) !important;
+
+            border-radius:
+                var(--gn-radius) !important;
+
+            box-shadow:
+                none !important;
+
+            text-shadow:
+                none !important;
+        }
+
+
+        button:hover,
+        input[type="button"]:hover,
+        input[type="submit"]:hover,
+        input[type="reset"]:hover {
+            background:
+                #21171b !important;
+
+            color:
+                var(--gn-strong) !important;
+        }
+
+
+        /* =====================================================
+           GENERIC BORDERS
+           ===================================================== */
+
+        fieldset,
+        table,
+        tbody,
+        thead,
+        tfoot,
+        tr,
+        td,
+        th,
+        hr {
+            border-color:
+                rgba(255,255,255,.035) !important;
+        }
+
+
+        /* =====================================================
+           SELECTION
+           ===================================================== */
+
+        ::selection {
+            background:
+                #533039 !important;
+
+            color:
+                white !important;
+        }
+
+
+        /* =====================================================
+           SCROLLBARS
+           ===================================================== */
+
+        * {
+            scrollbar-width:
+                thin !important;
+
+            scrollbar-color:
+                #292c30
+                #08090b !important;
+        }
+
+
+        ::-webkit-scrollbar {
+            width:
+                8px !important;
+
+            height:
+                8px !important;
+        }
+
+
+        ::-webkit-scrollbar-track {
+            background:
+                #08090b !important;
+        }
+
+
+        ::-webkit-scrollbar-thumb {
+            background:
+                #292c30 !important;
+
+            border:
+                2px solid
+                #08090b !important;
+
+            border-radius:
+                999px !important;
+        }
+
+
+        /* =====================================================
+           MAP MEDIA
+           ===================================================== */
+
+        .gn-v33-map-media {
+            transition:
+                filter .15s ease !important;
+        }
+
+
+        html.gn-v33-dim-map
+        .gn-v33-map-media {
+            filter:
+                brightness(
+                    var(--gn-map-brightness)
+                )
+                saturate(.95) !important;
+        }
+
+
+        /* =====================================================
+           GRAPHITE NIGHT BUTTON
+           ===================================================== */
+
+        #gn-v33-button {
+            position:
+                fixed !important;
+
+            right:
+                18px !important;
+
+            bottom:
+                18px !important;
+
+            z-index:
+                2147483646 !important;
+
+            width:
+                42px !important;
+
+            height:
+                32px !important;
+
+            display:
+                grid !important;
+
+            place-items:
+                center !important;
+
+            padding:
+                0 !important;
+
+            background:
+                #16181c !important;
+
+            color:
+                #d9bcc1 !important;
+
+            border:
+                1px solid
+                rgba(255,255,255,.065) !important;
+
+            border-radius:
+                999px !important;
+
+            box-shadow:
+                0 8px 26px
+                rgba(0,0,0,.42) !important;
+
+            font:
+                600 11px/1
+                "Google Sans",
+                "Segoe UI",
+                sans-serif !important;
+
+            cursor:
+                pointer !important;
+
+            opacity:
+                .7 !important;
+        }
+
+
+        #gn-v33-button:hover {
+            opacity:
+                1 !important;
+
+            background:
+                #21171b !important;
+        }
+
+
+        /* =====================================================
+           SETTINGS PANEL
+           ===================================================== */
+
+        #gn-v33-panel {
+            position:
+                fixed !important;
+
+            right:
+                18px !important;
+
+            bottom:
+                60px !important;
+
+            z-index:
+                2147483645 !important;
+
+            width:
+                310px !important;
+
+            max-height:
+                calc(100vh - 90px) !important;
+
+            overflow-y:
+                auto !important;
+
+            padding:
+                15px !important;
+
+            display:
+                none !important;
+
+            background:
+                rgba(13,15,18,.99) !important;
+
+            color:
+                var(--gn-text) !important;
+
+            border:
+                1px solid
+                rgba(255,255,255,.06) !important;
+
+            border-radius:
+                17px !important;
+
+            box-shadow:
+                0 22px 65px
+                rgba(0,0,0,.62) !important;
+        }
+
+
+        #gn-v33-panel.gn-open {
+            display:
+                block !important;
+        }
+
+
+        #gn-v33-panel * {
+            box-sizing:
+                border-box !important;
+        }
+
+
+        .gn-v33-title {
+            color:
+                var(--gn-strong) !important;
+
+            font-size:
+                15px !important;
+
+            font-weight:
+                600 !important;
+        }
+
+
+        .gn-v33-sub {
+            color:
+                var(--gn-muted) !important;
+
+            font-size:
+                11px !important;
+
+            margin:
+                4px 0 13px !important;
+        }
+
+
+        .gn-v33-heading {
+            margin:
+                15px 0 6px !important;
+
+            padding-top:
+                10px !important;
+
+            border-top:
+                1px solid
+                rgba(255,255,255,.04) !important;
+
+            color:
+                #d8c1c5 !important;
+
+            font-size:
+                11px !important;
+
+            font-weight:
+                600 !important;
+
+            text-transform:
+                uppercase !important;
+
+            letter-spacing:
+                .04em !important;
+        }
+
+
+        .gn-v33-row {
+            margin:
+                10px 0 !important;
+        }
+
+
+        .gn-v33-label {
+            display:
+                flex !important;
+
+            justify-content:
+                space-between !important;
+
+            margin-bottom:
+                5px !important;
+
+            color:
+                #c5c8cb !important;
+
+            font-size:
+                12px !important;
+        }
+
+
+        #gn-v33-panel
+        input[type="range"] {
+            width:
+                100% !important;
+        }
+
+
+        .gn-v33-toggle {
+            display:
+                flex !important;
+
+            justify-content:
+                space-between !important;
+
+            align-items:
+                center !important;
+
+            gap:
+                12px !important;
+
+            min-height:
+                31px !important;
+
+            color:
+                #c5c8cb !important;
+
+            font-size:
+                12px !important;
+        }
+
+
+        .gn-v33-toggle
+        input[type="checkbox"] {
+            flex:
+                0 0 auto !important;
+        }
+    `;
+
+
+    /* =========================================================
+       STYLE INJECTION
+       ========================================================= */
+
+    function injectStyle() {
+        if (
+            document.getElementById(
+                'gn-v33-style'
+            )
+        ) {
+            return;
+        }
+
+        const style =
+            document.createElement(
+                'style'
+            );
+
+        style.id =
+            'gn-v33-style';
+
+        style.textContent =
+            css;
+
+        (
+            document.head ||
+            document.documentElement
+        ).appendChild(style);
+    }
+
+
+    injectStyle();
+
+
+    /* =========================================================
+       COLOUR HELPERS
+       ========================================================= */
+
+    function parseColor(value) {
+        const match =
+            value?.match(
+                /rgba?\(\s*(\d+)\D+(\d+)\D+(\d+)(?:\D+([\d.]+))?/i
+            );
+
+        if (!match) {
+            return null;
+        }
+
+        return {
+            r: +match[1],
+            g: +match[2],
+            b: +match[3],
+
+            a:
+                match[4] === undefined
+                    ? 1
+                    : +match[4]
+        };
+    }
+
+
+    function luminance(color) {
+        return color
+            ? (
+                color.r * .2126 +
+                color.g * .7152 +
+                color.b * .0722
+            )
+            : 0;
+    }
+
+
+    function spread(color) {
+        return color
+            ? (
+                Math.max(
+                    color.r,
+                    color.g,
+                    color.b
+                ) -
+                Math.min(
+                    color.r,
+                    color.g,
+                    color.b
+                )
+            )
+            : 0;
+    }
+
+
+    function rect(element) {
+        const value =
+            element.getBoundingClientRect();
+
+        return (
+            value.width > 0 &&
+            value.height > 0
+        )
+            ? value
+            : null;
+    }
+
+
+    /* =========================================================
+       MAP DETECTION
+       ========================================================= */
+
+    function classifyMapMedia() {
+        let biggest =
+            null;
+
+        let biggestArea =
+            0;
+
+        document
+            .querySelectorAll(
+                'img,canvas,video'
+            )
+            .forEach(element => {
+                const areaRect =
+                    rect(element);
+
+                if (!areaRect) {
+                    return;
+                }
+
+                const area =
+                    areaRect.width *
+                    areaRect.height;
+
+                if (
+                    areaRect.width >
+                        400 &&
+                    areaRect.height >
+                        260
+                ) {
+                    element.classList.add(
+                        'gn-v33-map-media'
+                    );
+
+                    if (
+                        area >
+                        biggestArea
+                    ) {
+                        biggestArea =
+                            area;
+
+                        biggest =
+                            areaRect;
+                    }
+                }
+            });
+
+        return biggest;
+    }
+
+
+    function insideMapArea(
+        element,
+        mapRect
+    ) {
+        if (!mapRect) {
+            return false;
+        }
+
+        const area =
+            rect(element);
+
+        if (!area) {
+            return false;
+        }
+
+        /*
+         * The left sidebar remains themeable.
+         */
+        if (
+            area.left <
+            220
+        ) {
+            return false;
+        }
+
+        const centerX =
+            area.left +
+            area.width / 2;
+
+        const centerY =
+            area.top +
+            area.height / 2;
+
+        return (
+            centerX >=
+                mapRect.left &&
+            centerX <=
+                mapRect.right &&
+            centerY >=
+                mapRect.top &&
+            centerY <=
+                mapRect.bottom
+        );
+    }
+
+
+    /* =========================================================
+       ELEMENT FILTERING
+       ========================================================= */
+
+    function isIgnored(element) {
+        if (
+            !(
+                element instanceof
+                HTMLElement
+            )
+        ) {
+            return true;
+        }
+
+        if (
+            element.closest(
+                '#gn-v33-panel,#gn-v33-button'
+            )
+        ) {
+            return true;
+        }
+
+        return /^(IMG|CANVAS|VIDEO|SVG|PATH|PICTURE|SOURCE|SCRIPT|STYLE|LINK|META)$/
+            .test(
+                element.tagName
+            );
+    }
+
+
+    function setImportant(
+        element,
+        property,
+        value
+    ) {
+        if (
+            element.style
+                .getPropertyValue(
+                    property
+                ) ===
+                value &&
+            element.style
+                .getPropertyPriority(
+                    property
+                ) ===
+                'important'
+        ) {
+            return;
+        }
+
+        element.style.setProperty(
+            property,
+            value,
+            'important'
+        );
+    }
+
+
+    /* =========================================================
+       THEME PAINT
+       ========================================================= */
+
+    function paintElement(
+        element,
+        mapRect
+    ) {
+        if (
+            isIgnored(element)
+        ) {
+            return;
+        }
+
+        const area =
+            rect(element);
+
+        if (!area) {
+            return;
+        }
+
+        if (
+            insideMapArea(
+                element,
+                mapRect
+            )
+        ) {
+            return;
+        }
+
+        const computed =
+            getComputedStyle(element);
+
+        const background =
+            parseColor(
+                computed.backgroundColor
+            );
+
+        const foreground =
+            parseColor(
+                computed.color
+            );
+
+        const border =
+            parseColor(
+                computed.borderTopColor
+            );
+
+        const backgroundImage =
+            computed.backgroundImage ||
+            'none';
+
+        const hasRealImage =
+            backgroundImage.includes(
+                'url('
+            );
+
+        const hasGradient =
+            backgroundImage !==
+                'none' &&
+            !hasRealImage;
+
+
+        if (
+            hasGradient
+        ) {
+            setImportant(
+                element,
+                'background-image',
+                'none'
+            );
+        }
+
+
+        if (
+            !hasRealImage &&
+            background &&
+            background.a >
+                .03
+        ) {
+            const light =
+                luminance(
+                    background
+                );
+
+            const colourSpread =
+                spread(
+                    background
+                );
+
+            const huge =
+                area.width >
+                    innerWidth *
+                    .35 &&
+                area.height >
+                    innerHeight *
+                    .18;
+
+            const bar =
+                area.width >
+                    110 &&
+                area.height >=
+                    14 &&
+                area.height <=
+                    48;
+
+            const yellow =
+                background.r >
+                    120 &&
+                background.g >
+                    105 &&
+                background.b <
+                    135;
+
+            const blueCyan =
+                (
+                    background.b >
+                        background.r + 18 &&
+                    background.b >
+                        background.g + 6
+                ) ||
+                (
+                    background.g >
+                        background.r + 25 &&
+                    background.b >
+                        background.r + 20
+                );
+
+            const red =
+                background.r >
+                    background.g + 35 &&
+                background.r >
+                    background.b + 20;
+
+            const green =
+                background.g >
+                    background.r + 25 &&
+                background.g >
+                    background.b + 10;
+
+
+            if (
+                yellow
+            ) {
+                setImportant(
+                    element,
+                    'background-color',
+                    '#21171b'
+                );
+
+                setImportant(
+                    element,
+                    'color',
+                    '#eadadd'
+                );
+            }
+
+
+            else if (
+                red &&
+                bar
+            ) {
+                setImportant(
+                    element,
+                    'background-color',
+                    '#261416'
+                );
+
+                setImportant(
+                    element,
+                    'color',
+                    '#e5cbd0'
+                );
+            }
+
+
+            else if (
+                green &&
+                bar
+            ) {
+                setImportant(
+                    element,
+                    'background-color',
+                    '#172019'
+                );
+
+                setImportant(
+                    element,
+                    'color',
+                    '#d1ddd3'
+                );
+            }
+
+
+            else if (
+                blueCyan &&
+                bar
+            ) {
+                setImportant(
+                    element,
+                    'background-color',
+                    '#11191d'
+                );
+
+                setImportant(
+                    element,
+                    'color',
+                    '#cfdbdf'
+                );
+            }
+
+
+            else if (
+                light >
+                180
+            ) {
+                setImportant(
+                    element,
+                    'background-color',
+                    huge
+                        ? '#08090b'
+                        : '#0e1013'
+                );
+            }
+
+
+            else if (
+                light >
+                    95 &&
+                colourSpread <
+                    70
+            ) {
+                setImportant(
+                    element,
+                    'background-color',
+                    huge
+                        ? '#08090b'
+                        : '#0e1013'
+                );
+            }
+
+
+            else if (
+                area.left <
+                    210 &&
+                light >
+                    55 &&
+                colourSpread <
+                    95
+            ) {
+                setImportant(
+                    element,
+                    'background-color',
+                    '#0d0f12'
+                );
+            }
+        }
+
+
+        if (
+            border &&
+            luminance(border) >
+                100
+        ) {
+            setImportant(
+                element,
+                'border-color',
+                'rgba(255,255,255,.035)'
+            );
+        }
+
+
+        if (
+            foreground &&
+            luminance(foreground) <
+                125 &&
+            spread(foreground) <
+                75
+        ) {
+            setImportant(
+                element,
+                'color',
+                '#d2d4d7'
+            );
+        }
+
+
+        /*
+         * Old Vulnona sidebar rows.
+         */
+
+        if (
+            area.left <
+                210 &&
+            area.width >
+                85 &&
+            area.height >=
+                15 &&
+            area.height <=
+                34
+        ) {
+            const text =
+                (
+                    element.textContent ||
+                    ''
+                )
+                    .replace(
+                        /\s+/g,
+                        ' '
+                    )
+                    .trim();
+
+            if (
+                text &&
+                text.length <
+                    45 &&
+                !element.matches(
+                    'input,select,textarea'
+                )
+            ) {
+                if (
+                    !hasRealImage
+                ) {
+                    setImportant(
+                        element,
+                        'background-image',
+                        'none'
+                    );
+
+                    setImportant(
+                        element,
+                        'background-color',
+                        '#121419'
+                    );
+
+                    setImportant(
+                        element,
+                        'color',
+                        '#d7d9dc'
+                    );
+
+                    setImportant(
+                        element,
+                        'box-shadow',
+                        'none'
+                    );
+
+                    setImportant(
+                        element,
+                        'text-shadow',
+                        'none'
+                    );
+                }
+            }
+        }
+    }
+
+
+    /* =========================================================
+       AUTOMATIC DEFAULT MAP OPTIONS
+       ========================================================= */
+
+    function normalizeText(value) {
+        return String(
+            value ||
+            ''
+        )
+            .toLowerCase()
+            .replace(
+                /[^a-z0-9]+/g,
+                ' '
+            )
+            .replace(
+                /\s+/g,
+                ' '
+            )
+            .trim();
+    }
+
+
+    function checkboxDescriptions(
+        checkbox
+    ) {
+        const direct = [];
+        const nearby = [];
+
+
+        /*
+         * IDs/names are especially useful if Vulnona
+         * happens to expose a sensible internal name.
+         */
+
+        direct.push(
+            checkbox.id || '',
+            checkbox.name || '',
+            checkbox.value || '',
+            checkbox.title || '',
+            checkbox.getAttribute(
+                'aria-label'
+            ) || ''
+        );
+
+
+        /*
+         * Native labels associated with this checkbox.
+         */
+
+        if (
+            checkbox.labels
+        ) {
+            for (
+                const label
+                of checkbox.labels
+            ) {
+                direct.push(
+                    label.textContent || ''
+                );
+            }
+        }
+
+
+        /*
+         * Checkbox nested inside <label>.
+         */
+
+        const wrappingLabel =
+            checkbox.closest(
+                'label'
+            );
+
+        if (
+            wrappingLabel
+        ) {
+            direct.push(
+                wrappingLabel.textContent || ''
+            );
+        }
+
+
+        /*
+         * Closest siblings.
+         */
+
+        const previous =
+            checkbox.previousElementSibling;
+
+        const next =
+            checkbox.nextElementSibling;
+
+
+        if (previous) {
+            nearby.push(
+                previous.textContent || ''
+            );
+        }
+
+
+        if (next) {
+            nearby.push(
+                next.textContent || ''
+            );
+        }
+
+
+        /*
+         * Vulnona's old markup often places the checkbox and
+         * its label text together inside a small parent element.
+         *
+         * Only inspect reasonably small containers so we don't
+         * accidentally match an entire sidebar section.
+         */
+
+        let parent =
+            checkbox.parentElement;
+
+
+        for (
+            let level = 0;
+            parent &&
+            level < 3;
+            level++,
+            parent = parent.parentElement
+        ) {
+            const text =
+                (
+                    parent.textContent ||
+                    ''
+                )
+                    .replace(
+                        /\s+/g,
+                        ' '
+                    )
+                    .trim();
+
+            if (
+                text.length > 0 &&
+                text.length <= 180
+            ) {
+                nearby.push(
+                    text
+                );
+            }
+        }
+
+
+        return {
+            direct:
+                direct
+                    .map(
+                        normalizeText
+                    )
+                    .filter(Boolean),
+
+            nearby:
+                nearby
+                    .map(
+                        normalizeText
+                    )
+                    .filter(Boolean)
+        };
+    }
+
+
+    function aliasScore(
+        description,
+        alias
+    ) {
+        if (
+            !description ||
+            !alias
+        ) {
+            return 0;
+        }
+
+
+        if (
+            description ===
+            alias
+        ) {
+            return 100;
+        }
+
+
+        if (
+            description.includes(
+                alias
+            )
+        ) {
+            return 75;
+        }
+
+
+        if (
+            alias.includes(
+                description
+            ) &&
+            description.length >=
+                6
+        ) {
+            return 55;
+        }
+
+
+        return 0;
+    }
+
+
+    function findCheckboxForAliases(
+        aliases
+    ) {
+        const normalizedAliases =
+            aliases.map(
+                normalizeText
+            );
+
+
+        let bestCheckbox =
+            null;
+
+        let bestScore =
+            0;
+
+
+        for (
+            const checkbox
+            of document.querySelectorAll(
+                'input[type="checkbox"]'
+            )
+        ) {
+            if (
+                checkbox.closest(
+                    '#gn-v33-panel'
+                )
+            ) {
+                continue;
+            }
+
+
+            const descriptions =
+                checkboxDescriptions(
+                    checkbox
+                );
+
+
+            let score =
+                0;
+
+
+            for (
+                const alias
+                of normalizedAliases
+            ) {
+                /*
+                 * Direct label/id/name match.
+                 */
+
+                for (
+                    const description
+                    of descriptions.direct
+                ) {
+                    score =
+                        Math.max(
+                            score,
+                            aliasScore(
+                                description,
+                                alias
+                            ) + 40
+                        );
+                }
+
+
+                /*
+                 * Nearby text match.
+                 */
+
+                for (
+                    const description
+                    of descriptions.nearby
+                ) {
+                    score =
+                        Math.max(
+                            score,
+                            aliasScore(
+                                description,
+                                alias
+                            )
+                        );
+                }
+            }
+
+
+            if (
+                score >
+                bestScore
+            ) {
+                bestScore =
+                    score;
+
+                bestCheckbox =
+                    checkbox;
+            }
+        }
+
+
+        /*
+         * Require a reasonably convincing match.
+         */
+
+        return bestScore >= 70
+            ? bestCheckbox
+            : null;
+    }
+
+
+    function enableCheckbox(
+        checkbox
+    ) {
+        if (
+            !checkbox ||
+            checkbox.disabled
+        ) {
+            return false;
+        }
+
+
+        if (
+            checkbox.checked
+        ) {
+            return true;
+        }
+
+
+        startupPresetRunning =
+            true;
+
+
+        try {
+            /*
+             * click() is preferable to merely assigning
+             * .checked because Vulnona may have its own click
+             * handler that redraws the relevant map layer.
+             */
+
+            checkbox.click();
+
+
+            /*
+             * Fallback for controls whose handler doesn't
+             * respond to a programmatic click normally.
+             */
+
+            if (
+                !checkbox.checked
+            ) {
+                checkbox.checked =
+                    true;
+
+
+                checkbox.dispatchEvent(
+                    new Event(
+                        'input',
+                        {
+                            bubbles: true
+                        }
+                    )
+                );
+
+
+                checkbox.dispatchEvent(
+                    new Event(
+                        'change',
+                        {
+                            bubbles: true
+                        }
+                    )
+                );
+            }
+        }
+
+        finally {
+            startupPresetRunning =
+                false;
+        }
+
+
+        return checkbox.checked;
+    }
+
+
+    function applyStartupDefaults() {
+        /*
+         * Only relevant on Vulnona's map.
+         */
+
+        if (
+            !location.pathname
+                .startsWith(
+                    '/game/map'
+                )
+        ) {
+            return;
+        }
+
+
+        for (
+            const option
+            of STARTUP_OPTIONS
+        ) {
+            if (
+                !settings[
+                    option.setting
+                ]
+            ) {
+                continue;
+            }
+
+
+            const checkbox =
+                findCheckboxForAliases(
+                    option.aliases
+                );
+
+
+            if (
+                checkbox &&
+                !checkbox.checked
+            ) {
+                enableCheckbox(
+                    checkbox
+                );
+            }
+        }
+    }
+
+
+    function scheduleStartupDefaults() {
+        /*
+         * Vulnona builds some map-specific controls after
+         * its first page load, so retry several times.
+         *
+         * These stop after startup rather than permanently
+         * policing the controls, meaning you can still turn
+         * one off manually afterwards.
+         */
+
+        [
+            250,
+            700,
+            1400,
+            2500,
+            4500,
+            7000,
+            10000
+        ].forEach(
+            delay => {
+                setTimeout(
+                    applyStartupDefaults,
+                    delay
+                );
+            }
+        );
+    }
+
+
+    /* =========================================================
+       APPLY THEME SETTINGS
+       ========================================================= */
+
+    function applySettings() {
+        const root =
+            document.documentElement;
+
+
+        root.style.setProperty(
+            '--gn-scale',
+            String(
+                settings.uiScale /
+                100
+            )
+        );
+
+
+        root.style.setProperty(
+            '--gn-radius',
+            `${settings.roundness}px`
+        );
+
+
+        root.style.setProperty(
+            '--gn-map-brightness',
+            String(
+                settings.mapBrightness /
+                100
+            )
+        );
+
+
+        root.classList.toggle(
+            'gn-v33-dim-map',
+            settings.dimMap
+        );
+    }
+
+
+    /* =========================================================
+       MAIN PAINT PASS
+       ========================================================= */
+
+    function paint() {
+        if (
+            !document.body
+        ) {
+            return;
+        }
+
+
+        injectStyle();
+
+        applySettings();
+
+
+        setImportant(
+            document.documentElement,
+            'background-color',
+            '#08090b'
+        );
+
+
+        setImportant(
+            document.body,
+            'background-color',
+            '#08090b'
+        );
+
+
+        setImportant(
+            document.body,
+            'color',
+            '#d2d4d7'
+        );
+
+
+        const mapRect =
+            classifyMapMedia();
+
+
+        document
+            .querySelectorAll(`
+                body,
+                div,
+                section,
+                aside,
+                nav,
+                header,
+                footer,
+                main,
+                article,
+                table,
+                tbody,
+                thead,
+                tfoot,
+                tr,
+                td,
+                th,
+                form,
+                fieldset,
+                p,
+                span,
+                label,
+                h1,
+                h2,
+                h3,
+                h4,
+                h5,
+                h6,
+                ul,
+                ol,
+                li
+            `)
+            .forEach(
+                element =>
+                    paintElement(
+                        element,
+                        mapRect
+                    )
+            );
+    }
+
+
+    function queuePaint(
+        delay = 0
+    ) {
+        if (
+            paintQueued
+        ) {
+            return;
+        }
+
+
+        paintQueued =
+            true;
+
+
+        setTimeout(
+            () => {
+                paintQueued =
+                    false;
+
+
+                requestAnimationFrame(
+                    paint
+                );
+            },
+            delay
+        );
+    }
+
+
+    /* =========================================================
+       SETTINGS PANEL
+       ========================================================= */
+
+    function slider(
+        name,
+        label,
+        min,
+        max
+    ) {
+        return `
+            <div class="gn-v33-row">
+
+                <div class="gn-v33-label">
+                    <span>${label}</span>
+                    <span data-out="${name}"></span>
+                </div>
+
+                <input
+                    type="range"
+                    name="${name}"
+                    min="${min}"
+                    max="${max}"
+                    step="1"
+                >
+
+            </div>
+        `;
+    }
+
+
+    function toggle(
+        name,
+        label
+    ) {
+        return `
+            <label class="gn-v33-toggle">
+
+                <span>${label}</span>
+
+                <input
+                    type="checkbox"
+                    name="${name}"
+                >
+
+            </label>
+        `;
+    }
+
+
+    function installUI() {
+        if (
+            !TOP ||
+            !document.body ||
+            document.getElementById(
+                'gn-v33-button'
+            )
+        ) {
+            return;
+        }
+
+
+        const button =
+            document.createElement(
+                'button'
+            );
+
+
+        button.id =
+            'gn-v33-button';
+
+        button.type =
+            'button';
+
+        button.textContent =
+            'GN';
+
+        button.title =
+            'Graphite Night settings';
+
+
+        const panel =
+            document.createElement(
+                'div'
+            );
+
+
+        panel.id =
+            'gn-v33-panel';
+
+
+        panel.innerHTML = `
+            <div class="gn-v33-title">
+                Graphite Night
+            </div>
+
+            <div class="gn-v33-sub">
+                VulnonaMAP v3.3
+            </div>
+
+
+            ${slider(
+                'uiScale',
+                'UI scale',
+                90,
+                125
+            )}
+
+
+            ${slider(
+                'roundness',
+                'Roundness',
+                3,
+                18
+            )}
+
+
+            ${slider(
+                'mapBrightness',
+                'Map brightness',
+                65,
+                105
+            )}
+
+
+            ${toggle(
+                'dimMap',
+                'Dim map'
+            )}
+
+
+            <div class="gn-v33-heading">
+                Startup defaults
+            </div>
+
+
+            ${toggle(
+                'defaultPatrolZones',
+                'Patrol Zones'
+            )}
+
+
+            ${toggle(
+                'defaultMigrationZones',
+                'Migration Zones'
+            )}
+
+
+            ${toggle(
+                'defaultSanctuary',
+                'Sanctuary'
+            )}
+
+
+            ${toggle(
+                'defaultAnimateLatestLocation',
+                'Animate latest location'
+            )}
+        `;
+
+
+        document.body.append(
+            panel,
+            button
+        );
+
+
+        button.addEventListener(
+            'click',
+            event => {
+                event.stopPropagation();
+
+
+                panel.classList.toggle(
+                    'gn-open'
+                );
+            }
+        );
+
+
+        panel.addEventListener(
+            'input',
+            event => {
+                const input =
+                    event.target;
+
+
+                if (
+                    !(
+                        input instanceof
+                        HTMLInputElement
+                    )
+                ) {
+                    return;
+                }
+
+
+                settings[
+                    input.name
+                ] =
+                    input.type ===
+                    'checkbox'
+                        ? input.checked
+                        : Number(
+                            input.value
+                        );
+
+
+                save();
+
+                applySettings();
+
+                updateUI();
+
+                queuePaint();
+
+
+                if (
+                    input.name.startsWith(
+                        'default'
+                    ) &&
+                    input.checked
+                ) {
+                    setTimeout(
+                        applyStartupDefaults,
+                        50
+                    );
+                }
+            }
+        );
+
+
+        document.addEventListener(
+            'click',
+            event => {
+                if (
+                    panel.classList
+                        .contains(
+                            'gn-open'
+                        ) &&
+                    !panel.contains(
+                        event.target
+                    ) &&
+                    !button.contains(
+                        event.target
+                    )
+                ) {
+                    panel.classList.remove(
+                        'gn-open'
+                    );
+                }
+            }
+        );
+
+
+        updateUI();
+    }
+
+
+    function updateUI() {
+        const panel =
+            document.getElementById(
+                'gn-v33-panel'
+            );
+
+
+        if (!panel) {
+            return;
+        }
+
+
+        const values = {
+            uiScale:
+                `${settings.uiScale}%`,
+
+            roundness:
+                `${settings.roundness}px`,
+
+            mapBrightness:
+                `${settings.mapBrightness}%`
+        };
+
+
+        for (
+            const [name, value]
+            of Object.entries(values)
+        ) {
+            const output =
+                panel.querySelector(
+                    `[data-out="${name}"]`
+                );
+
+
+            const input =
+                panel.querySelector(
+                    `[name="${name}"]`
+                );
+
+
+            if (output) {
+                output.textContent =
+                    value;
+            }
+
+
+            if (input) {
+                input.value =
+                    settings[name];
+            }
+        }
+
+
+        const toggleNames = [
+            'dimMap',
+            'defaultPatrolZones',
+            'defaultMigrationZones',
+            'defaultSanctuary',
+            'defaultAnimateLatestLocation'
+        ];
+
+
+        for (
+            const name
+            of toggleNames
+        ) {
+            const input =
+                panel.querySelector(
+                    `[name="${name}"]`
+                );
+
+
+            if (input) {
+                input.checked =
+                    Boolean(
+                        settings[name]
+                    );
+            }
+        }
+    }
+
+
+    /* =========================================================
+       START
+       ========================================================= */
+
+    function start() {
+        injectStyle();
+
+        applySettings();
+
+        installUI();
+
+        paint();
+
+
+        /*
+         * Automatically enable the preferred options.
+         */
+
+        scheduleStartupDefaults();
+
+
+        /*
+         * Vulnona dynamically changes existing controls.
+         */
+
+        const observer =
+            new MutationObserver(
+                mutations => {
+                    queuePaint(25);
+
+
+                    /*
+                     * During initial loading, new controls may
+                     * appear after map data has finished loading.
+                     */
+
+                    if (
+                        !startupPresetRunning
+                    ) {
+                        const addedControls =
+                            mutations.some(
+                                mutation =>
+                                    mutation.type ===
+                                        'childList' &&
+                                    mutation.addedNodes
+                                        .length > 0
+                            );
+
+
+                        if (
+                            addedControls
+                        ) {
+                            setTimeout(
+                                applyStartupDefaults,
+                                120
+                            );
+                        }
+                    }
+                }
+            );
+
+
+        observer.observe(
+            document.documentElement,
+            {
+                childList:
+                    true,
+
+                subtree:
+                    true,
+
+                attributes:
+                    true,
+
+                attributeFilter: [
+                    'style',
+                    'hidden',
+                    'open',
+                    'aria-expanded',
+                    'class'
+                ]
+            }
+        );
+
+
+        /*
+         * Repaint after normal site interactions.
+         */
+
+        document.addEventListener(
+            'click',
+            event => {
+                if (
+                    event.target.closest?.(
+                        '#gn-v33-panel,#gn-v33-button'
+                    )
+                ) {
+                    return;
+                }
+
+
+                queuePaint(30);
+
+
+                setTimeout(
+                    paint,
+                    180
+                );
+
+
+                setTimeout(
+                    paint,
+                    500
+                );
+            },
+            true
+        );
+
+
+        document.addEventListener(
+            'change',
+            event => {
+                /*
+                 * Don't interpret our own automatic checkbox
+                 * changes as user configuration changes.
+                 */
+
+                if (
+                    startupPresetRunning
+                ) {
+                    return;
+                }
+
+
+                queuePaint(30);
+            },
+            true
+        );
+
+
+        /*
+         * Changing Vulnona map through #map=...
+         * can rebuild the map-specific controls.
+         */
+
+        window.addEventListener(
+            'hashchange',
+            () => {
+                queuePaint(30);
+
+
+                [
+                    250,
+                    800,
+                    1800,
+                    3500
+                ].forEach(
+                    delay => {
+                        setTimeout(
+                            applyStartupDefaults,
+                            delay
+                        );
+                    }
+                );
+            }
+        );
+
+
+        /*
+         * Initial theme follow-up passes.
+         */
+
+        [
+            150,
+            500,
+            1200,
+            2500
+        ].forEach(
+            milliseconds =>
+                setTimeout(
+                    paint,
+                    milliseconds
+                )
+        );
+
+
+        /*
+         * Slow theme safety repaint.
+         */
+
+        setInterval(
+            paint,
+            2000
+        );
+    }
+
+
+    if (
+        document.readyState ===
+        'loading'
+    ) {
+        document.addEventListener(
+            'DOMContentLoaded',
+            start,
+            {
+                once: true
+            }
+        );
+    }
+
+    else {
+        start();
+    }
+
+})();
